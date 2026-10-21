@@ -1,0 +1,100 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+//lemme state with enumerations
+enum OrderStatus {
+  PENDING
+  PAID
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+model Product {
+  id          String    @id @default(cuid())
+  name        String
+  description String
+  category    String //Required for catalog filtering and navigation
+  basePrice   Int //stored in interger cents eg $4.99 is stored as 499
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  archivedAt  DateTime?
+
+  variants Variant[]
+}
+
+model Variant {
+  id            String   @id @default(cuid())
+  productId     String
+  product       Product  @relation(fields: [productId], references: [id], onDelete: Restrict) // Guardrail against hard-deleting active products
+  size          String
+  color         String
+  priceOverride Int?
+  stock         Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  orderItems OrderItem[]
+
+  @@unique([productId, color, size]) // two variants shouldn't share the exact same product, size and color
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orders Order[]
+}
+
+model Order {
+  id          String      @id @default(cuid())
+  userId      String? //nullable to allow guest checkout
+  user        User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  clientName  String
+  phone       String
+  email       String
+  address     String
+  status      OrderStatus @default(PENDING)
+  totalAmount Int
+  currency    String // I chose to go with string because String is flexible,
+  // because using a prisma enum adding a new currency on the enum calls for a prisma migration
+  // and also validation a plain string with zod is more flexile
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  items OrderItem[]
+
+  @@index([userId])
+}
+
+model OrderItem {
+  id String @id @default(cuid())
+
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  variantId String //no productId: path via variant, which is never hard-deleted
+  variant   Variant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+
+  productName String
+  color       String
+  size        String
+  unitPrice   Int //BigInt would be the best idea here but I don't want to over-engineer this for now, lets keep it at int for now
+  currency    String
+  quantity    Int
+  lineTotal   Int //unitPrice * quantity (stored for tax/audit safety)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orderId])
+  @@index([variantId]) // I need this index because when I want to check for which order items reference this variant, I can easily get a list of them and possibly archive the variant is I need to do so
+}
