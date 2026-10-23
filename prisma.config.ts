@@ -1,5 +1,5 @@
 import dotenv from "dotenv";
-import { defineConfig} from "prisma/config";
+import { defineConfig } from "prisma/config";
 
 //explicitly load env variables from Next's .env.local
 dotenv.config({ path: ".env.local" });
